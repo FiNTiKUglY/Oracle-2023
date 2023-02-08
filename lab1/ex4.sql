@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION insert_command(ex_id number) RETURN VARCHAR2 IS
+CREATE OR REPLACE FUNCTION insert_command(ex_id NUMBER) RETURN VARCHAR2 IS
     ex_val NUMBER;
     answer VARCHAR2(30);
     
@@ -12,6 +12,6 @@ BEGIN
     fetch ct1 into ex_val;
     close ct1;
     
-    RETURN 'INSERT INTO MyTable(id, val) VALUES(' + ex_id + ex_val;
+    RETURN utl_lms.format_message('INSERT INTO MyTable(id, val) VALUES(%s, %s)', TO_CHAR(ex_id), TO_CHAR(ex_val));
 END;
 
