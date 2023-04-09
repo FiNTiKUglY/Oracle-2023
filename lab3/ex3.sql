@@ -85,3 +85,24 @@ BEGIN
     EXECUTE IMMEDIATE dev_package_text;
 END;
 /
+
+CREATE OR REPLACE PROCEDURE DDL_INDEXES(ind_name VARCHAR2, dev_schema_name VARCHAR2, prod_schema_name VARCHAR2) AS
+    dev_index_columns VARCHAR2(32767);
+    tab_name VARCHAR2(40);
+    whole_text VARCHAR2(32767);
+BEGIN
+    SELECT LISTAGG(TABLE_NAME) INTO tab_name
+    FROM ALL_INDEXES
+    WHERE OWNER = dev_schema_name 
+        AND INDEX_NAME = ind_name;
+    whole_text := 'CREATE INDEX ' || prod_schema_name || '.' || ind_name || ' ON ' || tab_name || '(';
+
+    SELECT LISTAGG(COLUMN_NAME, ', ') INTO dev_index_columns FROM ALL_IND_COLUMNS
+    WHERE INDEX_OWNER = dev_schema_name
+        AND INDEX_NAME = ind_name;
+
+    whole_text := CONCAT(whole_text, dev_index_columns || ');');
+    -- dbms_output.PUT_LINE(whole_text);
+    EXECUTE IMMEDIATE whole_text;
+END;
+/
