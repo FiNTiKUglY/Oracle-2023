@@ -35,7 +35,7 @@ BEGIN
             JOIN ALL_CONSTRAINTS
             ON ALL_CONSTRAINTS.TABLE_NAME = ALL_CONS_COLUMNS.TABLE_NAME
             WHERE ALL_CONSTRAINTS.OWNER = dev_schema_name 
-                AND REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, 'SYS%|BIN%')
+                AND NOT REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, '^SYS_|^BIN_')
                 AND ALL_CONS_COLUMNS.TABLE_NAME = dev_schema_table.TABLE_NAME
             MINUS
             SELECT ALL_CONS_COLUMNS.COLUMN_NAME, ALL_CONS_COLUMNS.CONSTRAINT_NAME, 
@@ -44,7 +44,7 @@ BEGIN
             JOIN ALL_CONSTRAINTS
             ON ALL_CONSTRAINTS.TABLE_NAME = ALL_CONS_COLUMNS.TABLE_NAME
             WHERE ALL_CONSTRAINTS.OWNER = prod_schema_name
-                AND REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, 'SYS%|BIN%')
+                AND NOT REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, '^SYS_|^BIN_')
                 AND ALL_CONS_COLUMNS.TABLE_NAME = dev_schema_table.TABLE_NAME)
             UNION ALL
             (SELECT ALL_CONS_COLUMNS.COLUMN_NAME, ALL_CONS_COLUMNS.CONSTRAINT_NAME, 
@@ -53,7 +53,7 @@ BEGIN
             JOIN ALL_CONSTRAINTS
             ON ALL_CONSTRAINTS.TABLE_NAME = ALL_CONS_COLUMNS.TABLE_NAME
             WHERE ALL_CONSTRAINTS.OWNER = prod_schema_name
-                AND REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, 'SYS%|BIN%')
+                AND NOT REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, '^SYS_|^BIN_')
                 AND ALL_CONS_COLUMNS.TABLE_NAME = dev_schema_table.TABLE_NAME
             MINUS
             SELECT ALL_CONS_COLUMNS.COLUMN_NAME, ALL_CONS_COLUMNS.CONSTRAINT_NAME, 
@@ -62,12 +62,12 @@ BEGIN
             JOIN ALL_CONSTRAINTS
             ON ALL_CONSTRAINTS.TABLE_NAME = ALL_CONS_COLUMNS.TABLE_NAME
             WHERE ALL_CONSTRAINTS.OWNER = dev_schema_name 
-                AND REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, 'SYS%|BIN%')
+                AND NOT REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, '^SYS_|^BIN_')
                 AND ALL_CONS_COLUMNS.TABLE_NAME = dev_schema_table.TABLE_NAME)
         );
 
         IF amount_tab <> 0 OR amount_cons <> 0 THEN
-            dbms_output.put_line('TABLE: ' || dev_schema_table.TABLE_NAME || amount_tab || amount_cons);
+            dbms_output.put_line('TABLE: ' || dev_schema_table.TABLE_NAME);
         END IF;
     END LOOP;
 END;
