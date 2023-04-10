@@ -68,6 +68,7 @@ BEGIN
 
         IF amount_tab <> 0 OR amount_cons <> 0 THEN
             dbms_output.put_line('TABLE: ' || dev_schema_table.TABLE_NAME);
+            DDL_TABLES(dev_schema_table.TABLE_NAME, dev_schema_name, prod_schema_name);
         END IF;
     END LOOP;
 END;

@@ -47,6 +47,7 @@ BEGIN
 
         IF var_amount <> 0 OR dev_procedure_text <> prod_procedure_text OR prod_procedure_text IS NULL THEN
             dbms_output.put_line('PROCEDURE: ' || dev_schema_procedure.NAME);
+            DDL_PROCEDURES(dev_schema_procedure.NAME, dev_schema_name, prod_schema_name);
         END IF;
     END LOOP;
 END;
@@ -101,6 +102,7 @@ BEGIN
 
         IF var_amount <> 0 OR dev_procedure_text <> prod_procedure_text OR prod_procedure_text IS NULL THEN
             dbms_output.put_line('FUNCTION: ' || dev_schema_procedure.NAME);
+            DDL_FUNCTIONS(dev_schema_procedure.NAME, dev_schema_name, prod_schema_name);
         END IF;
     END LOOP;
 END;
@@ -131,6 +133,7 @@ BEGIN
 
         IF dev_procedure_text <> prod_procedure_text OR prod_procedure_text IS NULL THEN
             dbms_output.put_line('PACKAGE: ' || dev_schema_procedure.NAME);
+            DDL_PACKAGES(dev_schema_procedure.NAME, dev_schema_name, prod_schema_name);
         END IF;
     END LOOP;
 END;
@@ -174,6 +177,7 @@ BEGIN
 
         IF amount_index <> 0 THEN
             dbms_output.put_line('INDEX: ' || dev_schema_index.INDEX_NAME);
+            DDL_INDEXES(dev_schema_index.INDEX_NAME, dev_schema_name, prod_schema_name);
         END IF;
     END LOOP;
 END;

@@ -91,17 +91,25 @@ CREATE OR REPLACE PROCEDURE DDL_INDEXES(ind_name VARCHAR2, dev_schema_name VARCH
     tab_name VARCHAR2(40);
     whole_text VARCHAR2(32767);
 BEGIN
+    BEGIN
+        EXECUTE IMMEDIATE 'DROP INDEX ' || prod_schema_name || '.' || ind_name;
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE != -1418 THEN
+                RAISE;
+            END IF;
+    END;
     SELECT LISTAGG(TABLE_NAME) INTO tab_name
     FROM ALL_INDEXES
     WHERE OWNER = dev_schema_name 
         AND INDEX_NAME = ind_name;
-    whole_text := 'CREATE INDEX ' || prod_schema_name || '.' || ind_name || ' ON ' || tab_name || '(';
+    whole_text := 'CREATE INDEX ' || prod_schema_name || '.' || ind_name || ' ON ' || prod_schema_name || '.' || tab_name || '(';
 
     SELECT LISTAGG(COLUMN_NAME, ', ') INTO dev_index_columns FROM ALL_IND_COLUMNS
     WHERE INDEX_OWNER = dev_schema_name
         AND INDEX_NAME = ind_name;
 
-    whole_text := CONCAT(whole_text, dev_index_columns || ');');
+    whole_text := CONCAT(whole_text, dev_index_columns || ')');
     -- dbms_output.PUT_LINE(whole_text);
     EXECUTE IMMEDIATE whole_text;
 END;
@@ -115,8 +123,8 @@ CREATE OR REPLACE PROCEDURE DDL_TABLES(tab_name VARCHAR2, dev_schema_name VARCHA
         WHERE OWNER = dev_schema_name
             AND TABLE_NAME = tab_name;
     CURSOR table_constraints IS
-        SELECT DISTINCT ALL_CONS_COLUMNS.COLUMN_NAME, ALL_CONS_COLUMNS.CONSTRAINT_NAME, 
-                    ALL_CONSTRAINTS.CONSTRAINT_TYPE, ALL_IND_COLUMNS.TABLE_NAME
+        SELECT DISTINCT ALL_CONS_COLUMNS.COLUMN_NAME, ALL_CONS_COLUMNS.CONSTRAINT_NAME, ALL_IND_COLUMNS.INDEX_NAME,
+                    ALL_CONSTRAINTS.CONSTRAINT_TYPE, ALL_IND_COLUMNS.TABLE_NAME, ALL_IND_COLUMNS.COLUMN_NAME ref_column
             FROM ALL_CONS_COLUMNS
             JOIN ALL_CONSTRAINTS
             ON ALL_CONSTRAINTS.TABLE_NAME = ALL_CONS_COLUMNS.TABLE_NAME
@@ -127,6 +135,14 @@ CREATE OR REPLACE PROCEDURE DDL_TABLES(tab_name VARCHAR2, dev_schema_name VARCHA
                 AND ALL_CONSTRAINTS.CONSTRAINT_TYPE <> 'C'
                 AND ALL_CONS_COLUMNS.TABLE_NAME = tab_name;
 BEGIN
+    BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE ' || prod_schema_name || '.' || tab_name;
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE != -942 THEN
+                RAISE;
+            END IF;
+    END;
     whole_text := CONCAT('CREATE TABLE ', prod_schema_name || '.' || tab_name || '(' || CHR(10));
     FOR table_column IN table_columns
     LOOP
@@ -138,20 +154,22 @@ BEGIN
     END LOOP;
     FOR table_constraint IN table_constraints
     LOOP
-        whole_text := CONCAT(whole_text, CHR(9) || 'CONSTRAINT ' || table_constraint.CONSTRAINT_NAME || ' ');
         IF table_constraint.CONSTRAINT_TYPE = 'U' THEN
+            whole_text := CONCAT(whole_text, CHR(9) || 'CONSTRAINT ' || table_constraint.CONSTRAINT_NAME || ' ');
             whole_text := CONCAT(whole_text, 'UNIQUE ');
             whole_text := CONCAT(whole_text, '(' || table_constraint.COLUMN_NAME || '),' || CHR(10));
         END IF;
-        IF table_constraint.CONSTRAINT_TYPE = 'P' THEN
+        IF table_constraint.CONSTRAINT_TYPE = 'P' AND SUBSTR(table_constraint.CONSTRAINT_NAME, 1, 1) = 'P' THEN
+            whole_text := CONCAT(whole_text, CHR(9) || 'CONSTRAINT ' || table_constraint.CONSTRAINT_NAME || ' ');
             whole_text := CONCAT(whole_text, 'PRIMARY KEY ');
             whole_text := CONCAT(whole_text, '(' || table_constraint.COLUMN_NAME || '),' || CHR(10));
         END IF;
-        IF table_constraint.CONSTRAINT_TYPE = 'R' THEN
+        IF table_constraint.CONSTRAINT_TYPE = 'R' AND SUBSTR(table_constraint.CONSTRAINT_NAME, 1, 1) = 'F' THEN
+            whole_text := CONCAT(whole_text, CHR(9) || 'CONSTRAINT ' || table_constraint.CONSTRAINT_NAME || ' ');
             whole_text := CONCAT(whole_text, 'FOREIGN KEY ');
             whole_text := CONCAT(whole_text, '(' || table_constraint.COLUMN_NAME || ')' || CHR(10));
             whole_text := CONCAT(whole_text, 'REFERENCES ' || prod_schema_name || '.' || table_constraint.TABLE_NAME);
-            whole_text := CONCAT(whole_text, '(' || table_constraint.COLUMN_NAME || '),' || CHR(10));
+            whole_text := CONCAT(whole_text, '(' || table_constraint.ref_column || '),' || CHR(10));
         END IF;
     END LOOP;
 
@@ -234,3 +252,52 @@ BEGIN
     END LOOP;
 END;
 /
+
+CREATE OR REPLACE PROCEDURE CHECK_CYCLE(dev_schema_name VARCHAR2) AS
+    amount NUMBER;
+    CURSOR tab_all IS
+    SELECT DISTINCT ALL_CONS_COLUMNS.COLUMN_NAME, ALL_CONS_COLUMNS.CONSTRAINT_NAME,
+        ALL_CONSTRAINTS.CONSTRAINT_TYPE, ALL_IND_COLUMNS.TABLE_NAME tab1, ALL_CONSTRAINTS.TABLE_NAME tab2
+            FROM ALL_CONS_COLUMNS
+            JOIN ALL_CONSTRAINTS
+            ON ALL_CONSTRAINTS.TABLE_NAME = ALL_CONS_COLUMNS.TABLE_NAME
+            LEFT JOIN ALL_IND_COLUMNS
+            ON ALL_CONSTRAINTS.R_CONSTRAINT_NAME = ALL_IND_COLUMNS.INDEX_NAME
+            WHERE ALL_CONSTRAINTS.OWNER = 'DEV_SCHEMA2'
+                AND NOT REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, '^SYS_|^BIN%')
+                AND ALL_CONSTRAINTS.CONSTRAINT_TYPE = 'R'
+                AND SUBSTR(ALL_CONS_COLUMNS.CONSTRAINT_NAME, 1, 1) = 'F';
+BEGIN
+    EXECUTE IMMEDIATE 'DELETE FROM cycle_check';
+    FOR tab IN tab_all
+    LOOP
+        EXECUTE IMMEDIATE 'INSERT INTO CYCLE_CHECK VALUES(''' || tab.tab1 || ''', ' || '1)';
+        EXECUTE IMMEDIATE 'INSERT INTO CYCLE_CHECK VALUES(''' || tab.tab2 || ''', ' || '-1)';
+        SELECT COUNT(*) INTO amount FROM
+            (SELECT name, sum(num) sum FROM cycle_check
+                GROUP BY name)
+            WHERE sum <> 0;
+        IF amount = 0 THEN 
+            RAISE_APPLICATION_ERROR(-20343,'CYCLE IN TABLES');
+        END IF;
+    END LOOP;
+END;
+/
+
+CREATE TABLE cycle_check
+(
+    name VARCHAR2(40),
+    num NUMBER
+);
+
+CREATE OR REPLACE PROCEDURE EXECUTE_SCRIPT(dev_schema_name VARCHAR2, prod_schema_name VARCHAR2) AS
+
+BEGIN
+    CHECK_CYCLE(dev_schema_name);
+    REMOVE_PROD_OBJ(dev_schema_name, prod_schema_name);
+    COMP_TABLES(dev_schema_name, prod_schema_name);
+    COMP_PROCEDURES(dev_schema_name, prod_schema_name);
+    COMP_FUNCTIONS(dev_schema_name, prod_schema_name);
+    COMP_PACKAGES(dev_schema_name, prod_schema_name);
+    COMP_INDEXES(dev_schema_name, prod_schema_name);
+END;
