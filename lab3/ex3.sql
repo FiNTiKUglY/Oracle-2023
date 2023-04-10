@@ -106,3 +106,75 @@ BEGIN
     EXECUTE IMMEDIATE whole_text;
 END;
 /
+
+CREATE OR REPLACE PROCEDURE REMOVE_PROD_OBJ(dev_schema_name VARCHAR2, prod_schema_name VARCHAR2) AS
+    CURSOR dev_schema_tables IS
+        SELECT TABLE_NAME FROM ALL_TABLES
+        WHERE OWNER = prod_schema_name
+        MINUS
+        SELECT TABLE_NAME FROM ALL_TABLES
+        WHERE OWNER = dev_schema_name;
+    
+    CURSOR dev_schema_procedures IS
+        SELECT DISTINCT NAME FROM ALL_SOURCE
+        WHERE OWNER = prod_schema_name
+            AND TYPE = 'PROCEDURE'
+        MINUS
+        SELECT DISTINCT NAME FROM ALL_SOURCE
+        WHERE OWNER = dev_schema_name
+            AND TYPE = 'PROCEDURE';
+    
+    CURSOR dev_schema_functions IS
+        SELECT DISTINCT NAME FROM ALL_SOURCE
+        WHERE OWNER = prod_schema_name
+            AND TYPE = 'FUNCTION'
+        MINUS
+        SELECT DISTINCT NAME FROM ALL_SOURCE
+        WHERE OWNER = dev_schema_name
+            AND TYPE = 'FUNCTION';
+    
+    CURSOR dev_schema_packages IS
+        SELECT DISTINCT NAME FROM ALL_SOURCE
+        WHERE OWNER = prod_schema_name
+            AND TYPE = 'PACKAGE'
+        MINUS
+        SELECT DISTINCT NAME FROM ALL_SOURCE
+        WHERE OWNER = dev_schema_name
+            AND TYPE = 'PACKAGE';
+    
+    CURSOR dev_schema_indexes IS
+        SELECT INDEX_NAME FROM ALL_INDEXES
+        WHERE OWNER = prod_schema_name 
+            AND NOT REGEXP_LIKE (ALL_INDEXES.INDEX_NAME, '^SYS_|^BIN_')
+        MINUS
+        SELECT INDEX_NAME FROM ALL_INDEXES
+        WHERE OWNER = dev_schema_name 
+            AND NOT REGEXP_LIKE (ALL_INDEXES.INDEX_NAME, '^SYS_|^BIN_');
+BEGIN
+    FOR dev_schema_table IN dev_schema_tables
+    LOOP
+        -- dbms_output.put_line('DROP TABLE ' || prod_schema_name || '.' || dev_schema_table.TABLE_NAME || ';');
+        EXECUTE IMMEDIATE 'DROP TABLE ' || prod_schema_name || '.' || dev_schema_table.TABLE_NAME;
+    END LOOP;
+    FOR dev_schema_procedure IN dev_schema_procedures
+    LOOP
+        -- dbms_output.put_line('DROP PROCEDURE ' || prod_schema_name || '.' || dev_schema_procedure.NAME || ';');
+        EXECUTE IMMEDIATE 'DROP PROCEDURE ' || prod_schema_name || '.' || dev_schema_procedure.NAME;
+    END LOOP;
+    FOR dev_schema_function IN dev_schema_functions
+    LOOP
+        -- dbms_output.put_line('DROP FUNCTION ' || prod_schema_name || '.' || dev_schema_function.NAME || ';');
+        EXECUTE IMMEDIATE 'DROP FUNCTION ' || prod_schema_name || '.' || dev_schema_function.NAME;
+    END LOOP;
+    FOR dev_schema_package IN dev_schema_packages
+    LOOP
+        -- dbms_output.put_line('DROP PACKAGE ' || prod_schema_name || '.' || dev_schema_package.NAME || ';');
+        EXECUTE IMMEDIATE 'DROP PACKAGE ' || prod_schema_name || '.' || dev_schema_package.NAME;
+    END LOOP;
+    FOR dev_schema_index IN dev_schema_indexes
+    LOOP
+        -- dbms_output.put_line('DROP INDEX ' || prod_schema_name || '.' || dev_schema_index.INDEX_NAME || ';');
+        EXECUTE IMMEDIATE 'DROP INDEX ' || prod_schema_name || '.' || dev_schema_index.INDEX_NAME;
+    END LOOP;
+END;
+/
