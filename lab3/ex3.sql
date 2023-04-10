@@ -107,6 +107,62 @@ BEGIN
 END;
 /
 
+CREATE OR REPLACE PROCEDURE DDL_TABLES(tab_name VARCHAR2, dev_schema_name VARCHAR2, prod_schema_name VARCHAR2) AS
+    whole_text VARCHAR2(32767);
+    CURSOR table_columns IS
+        SELECT column_name, data_type, data_length, nullable
+        FROM ALL_TAB_COLUMNS
+        WHERE OWNER = dev_schema_name
+            AND TABLE_NAME = tab_name;
+    CURSOR table_constraints IS
+        SELECT DISTINCT ALL_CONS_COLUMNS.COLUMN_NAME, ALL_CONS_COLUMNS.CONSTRAINT_NAME, 
+                    ALL_CONSTRAINTS.CONSTRAINT_TYPE, ALL_IND_COLUMNS.TABLE_NAME
+            FROM ALL_CONS_COLUMNS
+            JOIN ALL_CONSTRAINTS
+            ON ALL_CONSTRAINTS.TABLE_NAME = ALL_CONS_COLUMNS.TABLE_NAME
+            LEFT JOIN ALL_IND_COLUMNS
+            ON ALL_CONSTRAINTS.R_CONSTRAINT_NAME = ALL_IND_COLUMNS.INDEX_NAME
+            WHERE ALL_CONSTRAINTS.OWNER = dev_schema_name 
+                AND NOT REGEXP_LIKE (ALL_CONS_COLUMNS.CONSTRAINT_NAME, '^SYS_|^BIN%')
+                AND ALL_CONSTRAINTS.CONSTRAINT_TYPE <> 'C'
+                AND ALL_CONS_COLUMNS.TABLE_NAME = tab_name;
+BEGIN
+    whole_text := CONCAT('CREATE TABLE ', prod_schema_name || '.' || tab_name || '(' || CHR(10));
+    FOR table_column IN table_columns
+    LOOP
+        whole_text := CONCAT(whole_text, CHR(9) || table_column.COLUMN_NAME || ' ' || table_column.DATA_TYPE || '(' || table_column.DATA_LENGTH || ')');
+        IF table_column.NULLABLE = 'N' THEN
+            whole_text := CONCAT(whole_text, ' NOT NULL');
+        END IF;
+        whole_text := CONCAT(whole_text, ',' || CHR(10));
+    END LOOP;
+    FOR table_constraint IN table_constraints
+    LOOP
+        whole_text := CONCAT(whole_text, CHR(9) || 'CONSTRAINT ' || table_constraint.CONSTRAINT_NAME || ' ');
+        IF table_constraint.CONSTRAINT_TYPE = 'U' THEN
+            whole_text := CONCAT(whole_text, 'UNIQUE ');
+            whole_text := CONCAT(whole_text, '(' || table_constraint.COLUMN_NAME || '),' || CHR(10));
+        END IF;
+        IF table_constraint.CONSTRAINT_TYPE = 'P' THEN
+            whole_text := CONCAT(whole_text, 'PRIMARY KEY ');
+            whole_text := CONCAT(whole_text, '(' || table_constraint.COLUMN_NAME || '),' || CHR(10));
+        END IF;
+        IF table_constraint.CONSTRAINT_TYPE = 'R' THEN
+            whole_text := CONCAT(whole_text, 'FOREIGN KEY ');
+            whole_text := CONCAT(whole_text, '(' || table_constraint.COLUMN_NAME || ')' || CHR(10));
+            whole_text := CONCAT(whole_text, 'REFERENCES ' || prod_schema_name || '.' || table_constraint.TABLE_NAME);
+            whole_text := CONCAT(whole_text, '(' || table_constraint.COLUMN_NAME || '),' || CHR(10));
+        END IF;
+    END LOOP;
+
+    whole_text := CONCAT(whole_text, ')');
+    whole_text := REPLACE(whole_text, ',' || chr(10) || ')', chr(10) || ')');
+    whole_text := REPLACE(whole_text, ', )', ')');
+    -- dbms_output.PUT_LINE(whole_text);
+    EXECUTE IMMEDIATE whole_text;
+END;
+/
+
 CREATE OR REPLACE PROCEDURE REMOVE_PROD_OBJ(dev_schema_name VARCHAR2, prod_schema_name VARCHAR2) AS
     CURSOR dev_schema_tables IS
         SELECT TABLE_NAME FROM ALL_TABLES
