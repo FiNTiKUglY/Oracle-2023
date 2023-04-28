@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION PARTHENSE_REQUEST(json JSON_OBJECT_T) RETURN CLOB IS
+CREATE OR REPLACE FUNCTION PARSE_REQUEST(json JSON_OBJECT_T) RETURN CLOB IS
     tmp_array JSON_ARRAY_T;
     tmp_json JSON_OBJECT_T;
 
@@ -51,7 +51,7 @@ BEGIN
                 filters_string := '';
             END IF;
         END IF;
-
+        
         RETURN 'SELECT ' || columns_string || ' FROM ' || tables_string || joins_string || filters_string;
     ELSIF request = 'DELETE' THEN
         tmp_json := TREAT(json.GET('filters') AS JSON_OBJECT_T);
@@ -107,6 +107,24 @@ BEGIN
         END LOOP;
 
         RETURN 'INSERT INTO ' || json.GET_STRING('table') || '(' || columns_string || ') values(' || values_string || ')';
+    ELSIF request = 'CREATE' THEN
+        tmp_array := json.GET_ARRAY('columns');
+
+        FOR i IN 0..tmp_array.GET_SIZE() - 1
+        LOOP
+            tmp_json := treat(tmp_array.GET(i) AS JSON_OBJECT_T);
+
+            IF i = tmp_array.get_size() - 1 THEN
+                columns_string := columns_string || tmp_json.GET_STRING('value') || ' ' || tmp_json.GET_STRING('type');
+            ELSE
+                columns_string := columns_string || tmp_json.GET_STRING('value') || ' ' || tmp_json.GET_STRING('type') || ', ';
+            END IF;
+        END LOOP;
+
+        
+    RETURN 'CREATE TABLE ' || json.GET_STRING('table') || ' (' || columns_string || ')';
+    ELSIF request = 'DROP' THEN
+        return 'DROP TABLE ' || json.GET_STRING('table');
     ELSE
         IF json.GET_STRING('type') = 'value' THEN
             RETURN json.GET_STRING('value');
