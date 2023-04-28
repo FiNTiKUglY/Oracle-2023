@@ -1,3 +1,24 @@
+CREATE OR REPLACE PROCEDURE EXECUTE_REQUEST(json_text CLOB) IS
+    json JSON_OBJECT_T;
+    select_cursor SYS_REFCURSOR;
+    id NUMBER;
+    name VARCHAR2(40);
+BEGIN
+    json := JSON_OBJECT_T.parse(json_text);
+    IF json.GET_STRING('request') = 'SELECT' THEN
+        OPEN select_cursor FOR PARSE_REQUEST(json);
+        LOOP
+            FETCH select_cursor INTO id, name;
+            DBMS_OUTPUT.PUT_LINE(id || ' ' || name);
+            EXIT WHEN select_cursor%NOTFOUND;
+        END LOOP;
+        CLOSE select_cursor;
+    ELSE
+        EXECUTE IMMEDIATE PARSE_REQUEST(json);
+    END IF;
+END;
+/
+
 CREATE OR REPLACE FUNCTION PARSE_REQUEST(json JSON_OBJECT_T) RETURN CLOB IS
     tmp_array JSON_ARRAY_T;
     tmp_json JSON_OBJECT_T;
@@ -64,7 +85,7 @@ BEGIN
             END IF;
         END IF;
 
-        RETURN 'DELETE FROM ' || json.GET_STRING('TABLE') || filters_string;
+        RETURN 'DELETE FROM ' || json.GET_STRING('table') || filters_string;
     ELSIF request = 'UPDATE' THEN
         tmp_array := json.GET_ARRAY('columns');
 
@@ -89,7 +110,7 @@ BEGIN
             END IF;
         END IF;
 
-        RETURN 'UPDATE ' || json.GET_STRING('table') || ' set ' || columns_string || filters_string;
+        RETURN 'UPDATE ' || json.GET_STRING('table') || ' SET ' || columns_string || filters_string;
     ELSIF request = 'INSERT' THEN
         tmp_array := json.GET_ARRAY('columns');
 
@@ -120,9 +141,8 @@ BEGIN
                 columns_string := columns_string || tmp_json.GET_STRING('value') || ' ' || tmp_json.GET_STRING('type') || ', ';
             END IF;
         END LOOP;
-
         
-    RETURN 'CREATE TABLE ' || json.GET_STRING('table') || ' (' || columns_string || ')';
+        RETURN 'CREATE TABLE ' || json.GET_STRING('table') || ' (' || columns_string || ')';
     ELSIF request = 'DROP' THEN
         return 'DROP TABLE ' || json.GET_STRING('table');
     ELSE
